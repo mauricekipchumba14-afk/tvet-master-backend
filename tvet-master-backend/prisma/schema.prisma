@@ -1,0 +1,639 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================= ENUMS =========================
+
+enum Role {
+  student
+  trainer
+  hod
+  registrar
+  institution_admin
+  super_admin
+}
+
+enum InstitutionStatus {
+  active
+  trial
+  suspended
+}
+
+enum CourseLevel {
+  artisan
+  level5
+  level6
+  diploma
+}
+
+enum AssessmentType {
+  cat
+  exam
+  practical
+  assignment
+  quiz
+}
+
+enum MaterialType {
+  notes
+  past_paper
+  video
+  worked_example
+}
+
+enum MaterialVisibility {
+  institution_only
+  public_library
+}
+
+enum QuestionType {
+  mcq
+  true_false
+  short_answer
+  structured
+}
+
+enum Difficulty {
+  beginner
+  intermediate
+  advanced
+}
+
+enum QuizAttemptStatus {
+  in_progress
+  submitted
+  graded
+}
+
+enum AttendanceStatus {
+  present
+  absent
+  late
+  excused
+}
+
+enum SubscriptionStatus {
+  trial
+  active
+  past_due
+  cancelled
+}
+
+enum StudentPlan {
+  free
+  premium_monthly
+  premium_annual
+}
+
+enum TransactionType {
+  institution_subscription
+  student_premium
+  digital_product
+  video_course
+}
+
+enum PaymentMethod {
+  mpesa
+  card
+  bank_transfer
+}
+
+enum TransactionStatus {
+  pending
+  completed
+  failed
+  refunded
+}
+
+enum NotificationChannel {
+  push
+  sms
+  email
+  in_app
+}
+
+// ========================= INSTITUTIONS & STRUCTURE =========================
+
+model Institution {
+  id                String   @id @default(uuid())
+  name              String
+  subdomain         String   @unique
+  status            InstitutionStatus @default(trial)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  departments       Department[]
+  intakes           Intake[]
+  users             User[]
+  subscriptions     InstitutionSubscription[]
+  announcements     Announcement[]
+  transactions      Transaction[]
+}
+
+model Department {
+  id             String   @id @default(uuid())
+  institution    Institution @relation(fields: [institutionId], references: [id])
+  institutionId  String
+  name           String
+  code           String?
+  createdAt      DateTime @default(now())
+
+  courses        Course[]
+  trainers       TrainerProfile[]
+}
+
+model Course {
+  id             String   @id @default(uuid())
+  department     Department @relation(fields: [departmentId], references: [id])
+  departmentId   String
+  name           String
+  level          CourseLevel
+  durationYears  Decimal  @db.Decimal(3, 1)
+  createdAt      DateTime @default(now())
+
+  units          Unit[]
+  classes        Class[]
+  certificates   Certificate[]
+}
+
+model Intake {
+  id             String   @id @default(uuid())
+  institution    Institution @relation(fields: [institutionId], references: [id])
+  institutionId  String
+  name           String
+  startDate      DateTime
+  endDate        DateTime
+
+  classes        Class[]
+}
+
+model Class {
+  id             String   @id @default(uuid())
+  course         Course   @relation(fields: [courseId], references: [id])
+  courseId       String
+  intake         Intake   @relation(fields: [intakeId], references: [id])
+  intakeId       String
+  name           String
+  yearOfStudy    Int
+  createdAt      DateTime @default(now())
+
+  students       StudentProfile[]
+  unitAssignments UnitAssignment[]
+  assessments    Assessment[]
+  quizzes        Quiz[]
+  timetableEntries TimetableEntry[]
+  attendanceSessions AttendanceSession[]
+}
+
+model Unit {
+  id             String   @id @default(uuid())
+  course         Course   @relation(fields: [courseId], references: [id])
+  courseId       String
+  unitCode       String
+  unitName       String
+  semester       Int
+  creditHours    Int
+  createdAt      DateTime @default(now())
+
+  unitAssignments UnitAssignment[]
+  materials      Material[]
+  questionBank   QuestionBankItem[]
+  quizzes        Quiz[]
+  timetableEntries TimetableEntry[]
+  videoCourses   VideoCourse[]
+  aiConversations AiConversation[]
+}
+
+model UnitAssignment {
+  id          String  @id @default(uuid())
+  unit        Unit    @relation(fields: [unitId], references: [id])
+  unitId      String
+  class       Class   @relation(fields: [classId], references: [id])
+  classId     String
+  trainer     User    @relation(fields: [trainerId], references: [id])
+  trainerId   String
+  createdAt   DateTime @default(now())
+
+  @@unique([unitId, classId, trainerId])
+}
+
+// ========================= USERS =========================
+
+model User {
+  id            String   @id @default(uuid())
+  institution   Institution? @relation(fields: [institutionId], references: [id])
+  institutionId String?
+  role          Role
+  fullName      String
+  email         String   @unique
+  phone         String?
+  passwordHash  String
+  status        String   @default("active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  studentProfile   StudentProfile?
+  trainerProfile   TrainerProfile?
+  unitAssignments  UnitAssignment[]
+  marksEntered     Mark[]            @relation("MarksEnteredBy")
+  materialsUploaded Material[]       @relation("MaterialsUploadedBy")
+  announcements    Announcement[]
+  aiConversations  AiConversation[]
+  pointEvents      PointEvent[]
+  studentBadges    StudentBadge[]
+  studentSubscription StudentSubscription?
+  transactions     Transaction[]
+  certificates     Certificate[]
+  notifications    Notification[]
+}
+
+model StudentProfile {
+  userId           String   @id
+  user             User     @relation(fields: [userId], references: [id])
+  admissionNumber  String
+  class            Class?   @relation(fields: [classId], references: [id])
+  classId          String?
+  guardianContact  String?
+  enrollmentDate   DateTime @default(now())
+
+  marks            Mark[]
+  quizAttempts     QuizAttempt[]
+  attendanceRecords AttendanceRecord[]
+  videoProgress    VideoProgress[]
+}
+
+model TrainerProfile {
+  userId         String   @id
+  user           User     @relation(fields: [userId], references: [id])
+  department     Department @relation(fields: [departmentId], references: [id])
+  departmentId   String
+  staffNumber    String?
+}
+
+// ========================= MARKS & ASSESSMENTS =========================
+
+model Assessment {
+  id            String   @id @default(uuid())
+  unit          Unit     @relation(fields: [unitId], references: [id])
+  unitId        String
+  class         Class    @relation(fields: [classId], references: [id])
+  classId       String
+  trainerId     String
+  type          AssessmentType
+  title         String
+  maxScore      Decimal  @db.Decimal(6, 2)
+  weightPercent Decimal  @db.Decimal(5, 2)
+  date          DateTime
+  quiz          Quiz?
+  createdAt     DateTime @default(now())
+
+  marks         Mark[]
+}
+
+model Mark {
+  id            String   @id @default(uuid())
+  assessment    Assessment @relation(fields: [assessmentId], references: [id])
+  assessmentId  String
+  student       StudentProfile @relation(fields: [studentId], references: [userId])
+  studentId     String
+  score         Decimal  @db.Decimal(6, 2)
+  enteredBy     User     @relation("MarksEnteredBy", fields: [enteredById], references: [id])
+  enteredById   String
+  enteredAt     DateTime @default(now())
+
+  @@unique([assessmentId, studentId])
+}
+
+// ========================= CONTENT / DIGITAL LIBRARY =========================
+
+model Material {
+  id           String   @id @default(uuid())
+  unit         Unit     @relation(fields: [unitId], references: [id])
+  unitId       String
+  uploadedBy   User     @relation("MaterialsUploadedBy", fields: [uploadedById], references: [id])
+  uploadedById String
+  type         MaterialType
+  title        String
+  fileUrl      String
+  visibility   MaterialVisibility @default(institution_only)
+  createdAt    DateTime @default(now())
+}
+
+// ========================= QUIZZES / QUESTION BANK =========================
+
+model QuestionBankItem {
+  id            String   @id @default(uuid())
+  unit          Unit     @relation(fields: [unitId], references: [id])
+  unitId        String
+  createdById   String
+  questionText  String
+  questionType  QuestionType
+  difficulty    Difficulty
+  options       Json?
+  correctAnswer String?
+  marks         Decimal  @db.Decimal(5, 2)
+  tags          String[]
+  createdAt     DateTime @default(now())
+
+  quizQuestions QuizQuestion[]
+  quizAnswers   QuizAnswer[]
+}
+
+model Quiz {
+  id               String   @id @default(uuid())
+  unit             Unit     @relation(fields: [unitId], references: [id])
+  unitId           String
+  class            Class    @relation(fields: [classId], references: [id])
+  classId          String
+  createdById      String
+  title            String
+  questionCount    Int
+  difficultyMix    Json?
+  timeLimitMinutes Int
+  isRandomized     Boolean  @default(true)
+  availableFrom    DateTime
+  availableUntil   DateTime
+  assessment       Assessment? @relation(fields: [assessmentId], references: [id])
+  assessmentId     String?     @unique
+
+  quizQuestions    QuizQuestion[]
+  attempts         QuizAttempt[]
+}
+
+model QuizQuestion {
+  id         String @id @default(uuid())
+  quiz       Quiz   @relation(fields: [quizId], references: [id])
+  quizId     String
+  question   QuestionBankItem @relation(fields: [questionId], references: [id])
+  questionId String
+  orderIndex Int
+}
+
+model QuizAttempt {
+  id           String   @id @default(uuid())
+  quiz         Quiz     @relation(fields: [quizId], references: [id])
+  quizId       String
+  student      StudentProfile @relation(fields: [studentId], references: [userId])
+  studentId    String
+  startedAt    DateTime @default(now())
+  submittedAt  DateTime?
+  score        Decimal? @db.Decimal(6, 2)
+  status       QuizAttemptStatus @default(in_progress)
+
+  answers      QuizAnswer[]
+}
+
+model QuizAnswer {
+  id             String  @id @default(uuid())
+  attempt        QuizAttempt @relation(fields: [attemptId], references: [id])
+  attemptId      String
+  question       QuestionBankItem @relation(fields: [questionId], references: [id])
+  questionId     String
+  studentAnswer  String
+  isCorrect      Boolean?
+  scoreAwarded   Decimal? @db.Decimal(5, 2)
+  gradedById     String?
+}
+
+// ========================= TIMETABLE / ATTENDANCE =========================
+
+model TimetableEntry {
+  id          String  @id @default(uuid())
+  class       Class   @relation(fields: [classId], references: [id])
+  classId     String
+  unit        Unit    @relation(fields: [unitId], references: [id])
+  unitId      String
+  trainerId   String
+  dayOfWeek   String
+  startTime   String
+  endTime     String
+  room        String?
+}
+
+model AttendanceSession {
+  id         String  @id @default(uuid())
+  class      Class   @relation(fields: [classId], references: [id])
+  classId    String
+  unitId     String
+  trainerId  String
+  date       DateTime
+  createdAt  DateTime @default(now())
+
+  records    AttendanceRecord[]
+}
+
+model AttendanceRecord {
+  id         String  @id @default(uuid())
+  session    AttendanceSession @relation(fields: [sessionId], references: [id])
+  sessionId  String
+  student    StudentProfile @relation(fields: [studentId], references: [userId])
+  studentId  String
+  status     AttendanceStatus
+  markedAt   DateTime @default(now())
+
+  @@unique([sessionId, studentId])
+}
+
+// ========================= ANNOUNCEMENTS / NOTIFICATIONS =========================
+
+model Announcement {
+  id            String   @id @default(uuid())
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  institutionId String
+  postedBy      User     @relation(fields: [postedById], references: [id])
+  postedById    String
+  audience      String   // all | department | class
+  audienceId    String?
+  title         String
+  body          String
+  createdAt     DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  type      String
+  title     String
+  body      String
+  channel   NotificationChannel
+  readAt    DateTime?
+  sentAt    DateTime @default(now())
+}
+
+// ========================= VIDEO COURSES =========================
+
+model VideoCourse {
+  id            String   @id @default(uuid())
+  unit          Unit?    @relation(fields: [unitId], references: [id])
+  unitId        String?
+  title         String
+  description   String?
+  price         Decimal? @db.Decimal(8, 2)
+  createdById   String
+
+  lessons       VideoLesson[]
+  certificates  Certificate[]
+}
+
+model VideoLesson {
+  id             String  @id @default(uuid())
+  course         VideoCourse @relation(fields: [courseId], references: [id])
+  courseId       String
+  title          String
+  videoUrl       String
+  durationSeconds Int
+  orderIndex     Int
+
+  progress       VideoProgress[]
+}
+
+model VideoProgress {
+  student        StudentProfile @relation(fields: [studentId], references: [userId])
+  studentId      String
+  lesson         VideoLesson @relation(fields: [lessonId], references: [id])
+  lessonId       String
+  watchedSeconds Int      @default(0)
+  completed      Boolean  @default(false)
+
+  @@id([studentId, lessonId])
+}
+
+// ========================= AI TUTOR =========================
+
+model AiConversation {
+  id             String   @id @default(uuid())
+  student        User     @relation(fields: [studentId], references: [id])
+  studentId      String
+  unit           Unit?    @relation(fields: [unitId], references: [id])
+  unitId         String?
+  specialization String
+  startedAt      DateTime @default(now())
+
+  messages       AiMessage[]
+}
+
+model AiMessage {
+  id             String   @id @default(uuid())
+  conversation   AiConversation @relation(fields: [conversationId], references: [id])
+  conversationId String
+  role           String   // student | ai
+  content        String
+  createdAt      DateTime @default(now())
+}
+
+model AiUsageLimit {
+  studentId            String   @id
+  messagesUsedThisMonth Int     @default(0)
+  monthlyLimit         Int      @default(100)
+  resetsAt             DateTime
+}
+
+// ========================= GAMIFICATION =========================
+
+model PointEvent {
+  id           String   @id @default(uuid())
+  student      User     @relation(fields: [studentId], references: [id])
+  studentId    String
+  points       Int
+  reason       String
+  referenceId  String?
+  createdAt    DateTime @default(now())
+}
+
+model Badge {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  iconUrl     String?
+  criteria    Json
+
+  studentBadges StudentBadge[]
+}
+
+model StudentBadge {
+  student    User   @relation(fields: [studentId], references: [id])
+  studentId  String
+  badge      Badge  @relation(fields: [badgeId], references: [id])
+  badgeId    String
+  earnedAt   DateTime @default(now())
+
+  @@id([studentId, badgeId])
+}
+
+// ========================= PAYMENTS / SUBSCRIPTIONS =========================
+
+model SubscriptionPlan {
+  id            String   @id @default(uuid())
+  name          String
+  priceMonthly  Decimal  @db.Decimal(10, 2)
+  maxStudents   Int
+  features      Json?
+
+  institutionSubscriptions InstitutionSubscription[]
+}
+
+model InstitutionSubscription {
+  id            String   @id @default(uuid())
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  institutionId String
+  plan          SubscriptionPlan @relation(fields: [planId], references: [id])
+  planId        String
+  status        SubscriptionStatus @default(trial)
+  renewsAt      DateTime
+}
+
+model StudentSubscription {
+  id          String   @id @default(uuid())
+  student     User     @relation(fields: [studentId], references: [id])
+  studentId   String   @unique
+  plan        StudentPlan @default(free)
+  status      String   @default("active")
+  startedAt   DateTime @default(now())
+  expiresAt   DateTime?
+}
+
+model Transaction {
+  id                String   @id @default(uuid())
+  payer             User     @relation(fields: [payerId], references: [id])
+  payerId           String
+  institution       Institution? @relation(fields: [institutionId], references: [id])
+  institutionId     String?
+  type              TransactionType
+  referenceId       String?
+  amount            Decimal  @db.Decimal(10, 2)
+  currency          String   @default("KES")
+  paymentMethod     PaymentMethod
+  providerReference String?
+  status            TransactionStatus @default(pending)
+  createdAt         DateTime @default(now())
+}
+
+model DigitalProduct {
+  id                  String   @id @default(uuid())
+  title               String
+  type                String
+  price               Decimal  @db.Decimal(8, 2)
+  fileUrlOrCourseId   String
+  createdById         String
+}
+
+// ========================= CERTIFICATES =========================
+
+model Certificate {
+  id                String   @id @default(uuid())
+  student           User     @relation(fields: [studentId], references: [id])
+  studentId         String
+  course            Course?  @relation(fields: [courseId], references: [id])
+  courseId          String?
+  videoCourse       VideoCourse? @relation(fields: [videoCourseId], references: [id])
+  videoCourseId     String?
+  certificateNumber String   @unique
+  issuedAt          DateTime @default(now())
+  pdfUrl            String?
+}
