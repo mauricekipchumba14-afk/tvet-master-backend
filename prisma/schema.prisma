@@ -637,4 +637,9 @@ model Certificate {
   certificateNumber String   @unique
   issuedAt          DateTime @default(now())
   pdfUrl            String?
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
 }
