@@ -185,7 +185,6 @@ model Class {
   students       StudentProfile[]
   unitAssignments UnitAssignment[]
   assessments    Assessment[]
-  materials      Material[]
   quizzes        Quiz[]
   timetableEntries TimetableEntry[]
   attendanceSessions AttendanceSession[]
@@ -202,6 +201,7 @@ model Unit {
   createdAt      DateTime @default(now())
 
   unitAssignments UnitAssignment[]
+  assessments    Assessment[]
   materials      Material[]
   questionBank   QuestionBankItem[]
   quizzes        Quiz[]
