@@ -201,6 +201,7 @@ model Unit {
   createdAt      DateTime @default(now())
 
   unitAssignments UnitAssignment[]
+  assessments    Assessment[]
   materials      Material[]
   questionBank   QuestionBankItem[]
   quizzes        Quiz[]
